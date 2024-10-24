@@ -1,0 +1,9 @@
+conda create --name openmmlab python=3.8 -y
+conda activate openmmlab
+conda install pytorch==2.1.2 torchvision -c pytorch -y
+pip install -U openmim
+mim install mmengine
+mim install "mmcv==2.1.0"
+git clone git@github.com:marcusfechner/mmdetection.git
+cd mmdetection
+pip install -v -e .
