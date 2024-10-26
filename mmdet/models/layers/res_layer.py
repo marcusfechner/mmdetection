@@ -1,12 +1,14 @@
 # Copyright (c) OpenMMLab. All rights reserved.
 from typing import Optional
 
-from mmcv.cnn import build_conv_layer, build_norm_layer
+from mmcv.cnn import build_norm_layer
 from mmengine.model import BaseModule, Sequential
 from torch import Tensor
 from torch import nn as nn
 
 from mmdet.utils import ConfigType, OptConfigType, OptMultiConfig
+
+from ..layers.spectral_layer import build_conv_layer
 
 
 class ResLayer(Sequential):
