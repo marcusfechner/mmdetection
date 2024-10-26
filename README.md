@@ -99,6 +99,13 @@ The main branch works with **PyTorch 1.8+**.
 
 Apart from MMDetection, we also released [MMEngine](https://github.com/open-mmlab/mmengine) for model training and [MMCV](https://github.com/open-mmlab/mmcv) for computer vision research, which are heavily depended on by this toolbox.
 
+## Pretraining a ResNet with DDU on Imagenet
+
+1. Follow `installation_guide.txt` to install all dependencies for mmdetection.
+2. Follow `download_dataset.txt` to download and extract imagenet.
+3. `cd references`
+4. Train on 2 GPUs with `torchrun --nproc_per_node=2 train.py --model mmdetection-resnet101 --data-path path/to/imagenet/root/folder --amp`
+
 ## What's New
 
 💎 **We have released the pre-trained weights for MM-Grounding-DINO Swin-B and Swin-L, welcome to try and give feedback.**

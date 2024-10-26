@@ -6,4 +6,5 @@ mim install mmengine
 mim install "mmcv==2.1.0"
 git clone git@github.com:marcusfechner/mmdetection.git
 cd mmdetection
+git checkout fb_uncertainty
 pip install -v -e .
