@@ -9,7 +9,7 @@ from torch import Tensor
 from mmdet.registry import MODELS
 from mmdet.utils import ConfigType, MultiConfig, OptConfigType
 
-from ..layers import ConvModule
+from ..layers.spectral_layer import ConvModule
 
 
 @MODELS.register_module()
