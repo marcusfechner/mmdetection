@@ -1,11 +1,13 @@
 import warnings
+from functools import partial
 from typing import Dict, Optional, Tuple, Union
 
 import torch
 import torch.nn as nn
 from mmcv.cnn import build_activation_layer, build_norm_layer, build_padding_layer
 from mmcv.cnn import build_conv_layer as base_build_conv_layer
-from mmcv.cnn.bricks import ConvModule as BaseConvModule
+from mmcv.cnn.bricks.conv_module import efficient_conv_bn_eval_forward
+from mmengine.model import constant_init, kaiming_init
 from mmengine.utils.dl_utils.parrots_wrapper import _BatchNorm, _InstanceNorm
 from torch.nn.functional import normalize
 from torch.nn.utils.spectral_norm import SpectralNorm, SpectralNormLoadStateDictPreHook, SpectralNormStateDictHook
@@ -140,7 +142,7 @@ def build_conv_layer(cfg: Optional[Dict], *args, **kwargs) -> nn.Module:
     conv_layer = base_build_conv_layer(cfg, *args, **kwargs)
     return wrap_conv(conv_layer, spectral_norm) if spectral_norm else conv_layer
 
-class ConvModule(BaseConvModule):
+class ConvModule(nn.Module):
     """A conv block that bundles conv/norm/activation layers.
 
     This block simplifies the usage of convolution layers, which are commonly
@@ -298,3 +300,115 @@ class ConvModule(BaseConvModule):
 
         # Use msra init by default
         self.init_weights()
+
+    @property
+    def norm(self):
+        if self.norm_name:
+            return getattr(self, self.norm_name)
+        else:
+            return None
+
+    def init_weights(self):
+        # 1. It is mainly for customized conv layers with their own
+        #    initialization manners by calling their own ``init_weights()``,
+        #    and we do not want ConvModule to override the initialization.
+        # 2. For customized conv layers without their own initialization
+        #    manners (that is, they don't have their own ``init_weights()``)
+        #    and PyTorch's conv layers, they will be initialized by
+        #    this method with default ``kaiming_init``.
+        # Note: For PyTorch's conv layers, they will be overwritten by our
+        #    initialization implementation using default ``kaiming_init``.
+        if not hasattr(self.conv, 'init_weights'):
+            if self.with_activation and self.act_cfg['type'] == 'LeakyReLU':
+                nonlinearity = 'leaky_relu'
+                a = self.act_cfg.get('negative_slope', 0.01)
+            else:
+                nonlinearity = 'relu'
+                a = 0
+            kaiming_init(self.conv, a=a, nonlinearity=nonlinearity)
+        if self.with_norm:
+            constant_init(self.norm, 1, bias=0)
+
+    def forward(self,
+                x: torch.Tensor,
+                activate: bool = True,
+                norm: bool = True) -> torch.Tensor:
+        layer_index = 0
+        while layer_index < len(self.order):
+            layer = self.order[layer_index]
+            if layer == 'conv':
+                if self.with_explicit_padding:
+                    x = self.padding_layer(x)
+                # if the next operation is norm and we have a norm layer in
+                # eval mode and we have enabled `efficient_conv_bn_eval` for
+                # the conv operator, then activate the optimized forward and
+                # skip the next norm operator since it has been fused
+                if layer_index + 1 < len(self.order) and \
+                        self.order[layer_index + 1] == 'norm' and norm and \
+                        self.with_norm and not self.norm.training and \
+                        self.efficient_conv_bn_eval_forward is not None:
+                    self.conv.forward = partial(
+                        self.efficient_conv_bn_eval_forward, self.norm,
+                        self.conv)
+                    layer_index += 1
+                    x = self.conv(x)
+                    del self.conv.forward
+                else:
+                    x = self.conv(x)
+            elif layer == 'norm' and norm and self.with_norm:
+                x = self.norm(x)
+            elif layer == 'act' and activate and self.with_activation:
+                x = self.activate(x)
+            layer_index += 1
+        return x
+
+    def turn_on_efficient_conv_bn_eval(self, efficient_conv_bn_eval=True):
+        # efficient_conv_bn_eval works for conv + bn
+        # with `track_running_stats` option
+        if efficient_conv_bn_eval and self.norm \
+                            and isinstance(self.norm, _BatchNorm) \
+                            and self.norm.track_running_stats:
+            self.efficient_conv_bn_eval_forward = efficient_conv_bn_eval_forward  # noqa: E501
+        else:
+            self.efficient_conv_bn_eval_forward = None  # type: ignore
+
+    @staticmethod
+    def create_from_conv_bn(conv: torch.nn.modules.conv._ConvNd,
+                            bn: torch.nn.modules.batchnorm._BatchNorm,
+                            efficient_conv_bn_eval=True) -> 'ConvModule':
+        """Create a ConvModule from a conv and a bn module."""
+        self = ConvModule.__new__(ConvModule)
+        super(ConvModule, self).__init__()
+
+        self.conv_cfg = None
+        self.norm_cfg = None
+        self.act_cfg = None
+        self.inplace = False
+        self.with_spectral_norm = False
+        self.with_explicit_padding = False
+        self.order = ('conv', 'norm', 'act')
+
+        self.with_norm = True
+        self.with_activation = False
+        self.with_bias = conv.bias is not None
+
+        # build convolution layer
+        self.conv = conv
+        # export the attributes of self.conv to a higher level for convenience
+        self.in_channels = self.conv.in_channels
+        self.out_channels = self.conv.out_channels
+        self.kernel_size = self.conv.kernel_size
+        self.stride = self.conv.stride
+        self.padding = self.conv.padding
+        self.dilation = self.conv.dilation
+        self.transposed = self.conv.transposed
+        self.output_padding = self.conv.output_padding
+        self.groups = self.conv.groups
+
+        # build normalization layers
+        self.norm_name, norm = 'bn', bn
+        self.add_module(self.norm_name, norm)
+
+        self.turn_on_efficient_conv_bn_eval(efficient_conv_bn_eval)
+
+        return self
