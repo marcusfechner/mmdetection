@@ -503,4 +503,7 @@ def mmdetection_get_model(model_name, num_classes, weights = None, progress = Tr
     assert "resnet" in model_name, "Only ResNet models are supported"
     model_name = model_name.split("-", 1)[-1]
     depth = int("".join([x for x in model_name if x.isdigit()]))
-    return ResNet(depth, (3,), num_classes, **config)
+    model = ResNet(depth, (3,), num_classes, **config)
+    if weights is not None:
+        model.load_state_dict(weights.get_state_dict(progress=progress, check_hash=True))
+    return model
