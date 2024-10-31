@@ -11,6 +11,14 @@ def convert_weights(input_path, output_path):
     # Extract the 'model' dictionary
     model_dict = checkpoint.get('model')
     
+    # Rename keys by removing the 'resnet.' prefix
+    prefix = 'resnet.'
+    if model_dict is not None:
+        for key in list(model_dict.keys()):
+            if key.startswith(prefix):
+                new_key = key[len(prefix):]
+                model_dict[new_key] = model_dict.pop(key)
+    
     if model_dict is None:
         raise ValueError("The input .pth file does not contain a 'model' key.")
     
