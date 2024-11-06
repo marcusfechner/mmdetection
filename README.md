@@ -104,7 +104,7 @@ Apart from MMDetection, we also released [MMEngine](https://github.com/open-mmla
 1. Follow `installation_guide.txt` to install all dependencies for mmdetection.
 2. Follow `download_dataset.txt` to download and extract imagenet.
 3. `cd references`
-4. Train on 2 GPUs with `torchrun --nproc_per_node=2 train.py --model mmdetection-resnet101 --data-path path/to/imagenet/root/folder --amp`
+4. Train on 2 GPUs with `torchrun --nproc_per_node=2 train.py --model mmdetection-resnet101 --batch-size 512 --lr 0.5 --lr-scheduler cosineannealinglr --lr-warmup-epochs 5 --lr-warmup-method linear --auto-augment ta_wide --epochs 600 --random-erase 0.1 --weight-decay 0.00002 --norm-weight-decay 0.0 --label-smoothing 0.1 --mixup-alpha 0.2 --cutmix-alpha 1.0 --model-ema --val-resize-size 232 --amp --data-path /path/to/imagenet/root/folder`
 
 ## What's New
 

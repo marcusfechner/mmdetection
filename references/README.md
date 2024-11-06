@@ -23,8 +23,7 @@ Since `AlexNet` and the original `VGG` architectures do not include batch
 normalization, the default initial learning rate `--lr 0.1` is too high.
 
 ```
-torchrun --nproc_per_node=8 train.py\
-    --model $MODEL --lr 1e-2
+torchrun --nproc_per_node=2 train.py --model mmdetection-resnet101 --batch-size 512 --lr 0.5 --lr-scheduler cosineannealinglr --lr-warmup-epochs 5 --lr-warmup-method linear --auto-augment ta_wide --epochs 600 --random-erase 0.1 --weight-decay 0.00002 --norm-weight-decay 0.0 --label-smoothing 0.1 --mixup-alpha 0.2 --cutmix-alpha 1.0 --model-ema --val-resize-size 232 --amp --data-path /path/to/imagenet/root/folder
 ```
 
 Here `$MODEL` is one of `alexnet`, `vgg11`, `vgg13`, `vgg16` or `vgg19`. Note
